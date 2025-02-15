@@ -23,7 +23,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
  * Gets the status of the record output.
  *
  * @responseField outputActive        | Boolean | Whether the output is active
- * @responseField ouputPaused         | Boolean | Whether the output is paused
+ * @responseField outputPaused        | Boolean | Whether the output is paused
  * @responseField outputTimecode      | String  | Current formatted timecode string for the output
  * @responseField outputDuration      | Number  | Current duration in milliseconds for the output
  * @responseField outputBytes         | Number  | Number of bytes sent by the output
@@ -35,7 +35,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
  * @api requests
  * @category record
  */
-RequestResult RequestHandler::GetRecordStatus(const Request&)
+RequestResult RequestHandler::GetRecordStatus(const Request &)
 {
 	OBSOutputAutoRelease recordOutput = obs_frontend_get_recording_output();
 
@@ -54,6 +54,8 @@ RequestResult RequestHandler::GetRecordStatus(const Request&)
 /**
  * Toggles the status of the record output.
  *
+ * @responseField outputActive | Boolean | The new active state of the output
+ *
  * @requestType ToggleRecord
  * @complexity 1
  * @rpcVersion -1
@@ -61,7 +63,7 @@ RequestResult RequestHandler::GetRecordStatus(const Request&)
  * @api requests
  * @category record
  */
-RequestResult RequestHandler::ToggleRecord(const Request&)
+RequestResult RequestHandler::ToggleRecord(const Request &)
 {
 	json responseData;
 	if (obs_frontend_recording_active()) {
@@ -85,7 +87,7 @@ RequestResult RequestHandler::ToggleRecord(const Request&)
  * @api requests
  * @category record
  */
-RequestResult RequestHandler::StartRecord(const Request&)
+RequestResult RequestHandler::StartRecord(const Request &)
 {
 	if (obs_frontend_recording_active())
 		return RequestResult::Error(RequestStatus::OutputRunning);
@@ -99,6 +101,8 @@ RequestResult RequestHandler::StartRecord(const Request&)
 /**
  * Stops the record output.
  *
+ * @responseField outputPath | String | File name for the saved recording
+ *
  * @requestType StopRecord
  * @complexity 1
  * @rpcVersion -1
@@ -106,7 +110,7 @@ RequestResult RequestHandler::StartRecord(const Request&)
  * @api requests
  * @category record
  */
-RequestResult RequestHandler::StopRecord(const Request&)
+RequestResult RequestHandler::StopRecord(const Request &)
 {
 	if (!obs_frontend_recording_active())
 		return RequestResult::Error(RequestStatus::OutputNotRunning);
@@ -114,7 +118,10 @@ RequestResult RequestHandler::StopRecord(const Request&)
 	// TODO: Call signal directly to perform blocking wait
 	obs_frontend_recording_stop();
 
-	return RequestResult::Success();
+	json responseData;
+	responseData["outputPath"] = Utils::Obs::StringHelper::GetLastRecordFileName();
+
+	return RequestResult::Success(responseData);
 }
 
 /**
@@ -127,7 +134,7 @@ RequestResult RequestHandler::StopRecord(const Request&)
  * @api requests
  * @category record
  */
-RequestResult RequestHandler::ToggleRecordPause(const Request&)
+RequestResult RequestHandler::ToggleRecordPause(const Request &)
 {
 	json responseData;
 	if (obs_frontend_recording_paused()) {
@@ -151,7 +158,7 @@ RequestResult RequestHandler::ToggleRecordPause(const Request&)
  * @api requests
  * @category record
  */
-RequestResult RequestHandler::PauseRecord(const Request&)
+RequestResult RequestHandler::PauseRecord(const Request &)
 {
 	if (obs_frontend_recording_paused())
 		return RequestResult::Error(RequestStatus::OutputPaused);
@@ -172,7 +179,7 @@ RequestResult RequestHandler::PauseRecord(const Request&)
  * @api requests
  * @category record
  */
-RequestResult RequestHandler::ResumeRecord(const Request&)
+RequestResult RequestHandler::ResumeRecord(const Request &)
 {
 	if (!obs_frontend_recording_paused())
 		return RequestResult::Error(RequestStatus::OutputNotPaused);
@@ -184,21 +191,58 @@ RequestResult RequestHandler::ResumeRecord(const Request&)
 }
 
 /**
- * Gets the current directory that the record output is set to.
+ * Splits the current file being recorded into a new file.
  *
- * @responseField recordDirectory | String | Output directory
- *
- * @requestType GetRecordDirectory
- * @complexity 1
+ * @requestType SplitRecordFile
+ * @complexity 2
  * @rpcVersion -1
- * @initialVersion 5.0.0
+ * @initialVersion 5.5.0
  * @api requests
  * @category record
  */
-RequestResult RequestHandler::GetRecordDirectory(const Request&)
+RequestResult RequestHandler::SplitRecordFile(const Request &)
 {
-	json responseData;
-	responseData["recordDirectory"] = Utils::Obs::StringHelper::GetCurrentRecordOutputPath();
+	if (!obs_frontend_recording_active())
+		return RequestResult::Error(RequestStatus::OutputNotRunning);
 
-	return RequestResult::Success(responseData);
+	if (!obs_frontend_recording_split_file())
+		return RequestResult::Error(RequestStatus::RequestProcessingFailed,
+					    "Verify that file splitting is enabled in the output settings.");
+
+	return RequestResult::Success();
+}
+
+/**
+ * Adds a new chapter marker to the file currently being recorded.
+ *
+ * Note: As of OBS 30.2.0, the only file format supporting this feature is Hybrid MP4.
+ *
+ * @requestField ?chapterName | String | Name of the new chapter
+ *
+ * @requestType CreateRecordChapter
+ * @complexity 2
+ * @rpcVersion -1
+ * @initialVersion 5.5.0
+ * @api requests
+ * @category record
+ */
+RequestResult RequestHandler::CreateRecordChapter(const Request &request)
+{
+	std::string chapterName;
+	if (request.Contains("chapterName")) {
+		RequestStatus::RequestStatus statusCode;
+		std::string comment;
+		if (!request.ValidateOptionalString("chapterName", statusCode, comment))
+			return RequestResult::Error(statusCode, comment);
+		chapterName = request.RequestData["chapterName"];
+	}
+
+	if (!obs_frontend_recording_active())
+		return RequestResult::Error(RequestStatus::OutputNotRunning);
+
+	if (!obs_frontend_recording_add_chapter(chapterName.empty() ? nullptr : chapterName.c_str()))
+		return RequestResult::Error(RequestStatus::RequestProcessingFailed,
+					    "Verify that the output being used supports chapter markers.");
+
+	return RequestResult::Success();
 }

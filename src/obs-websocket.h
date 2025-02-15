@@ -26,7 +26,9 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include "utils/Obs.h"
 #include "plugin-macros.generated.h"
 
-class Config;
+#define CURRENT_RPC_VERSION 1
+
+struct Config;
 typedef std::shared_ptr<Config> ConfigPtr;
 
 class EventHandler;
@@ -38,7 +40,7 @@ typedef std::shared_ptr<WebSocketApi> WebSocketApiPtr;
 class WebSocketServer;
 typedef std::shared_ptr<WebSocketServer> WebSocketServerPtr;
 
-os_cpu_usage_info_t* GetCpuUsageInfo();
+os_cpu_usage_info_t *GetCpuUsageInfo();
 
 ConfigPtr GetConfig();
 

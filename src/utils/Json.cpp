@@ -17,11 +17,12 @@ You should have received a copy of the GNU General Public License along
 with this program. If not, see <https://www.gnu.org/licenses/>
 */
 
-#include "Json.h"
-#include "Platform.h"
-#include "../plugin-macros.generated.h"
+#include <fstream>
 
-bool Utils::Json::JsonArrayIsValidObsArray(json j)
+#include "Json.h"
+#include "plugin-macros.generated.h"
+
+bool Utils::Json::JsonArrayIsValidObsArray(const json &j)
 {
 	for (auto it : j) {
 		if (!it.is_object())
@@ -45,7 +46,7 @@ void obs_data_set_json_array(obs_data_t *d, const char *key, json j)
 {
 	obs_data_array_t *array = obs_data_array_create();
 
-	for (auto& [key, value] : j.items()) {
+	for (auto &[key, value] : j.items()) {
 		if (!value.is_object())
 			continue;
 
@@ -61,7 +62,7 @@ void obs_data_set_json_array(obs_data_t *d, const char *key, json j)
 
 void obs_data_set_json_object_item(obs_data_t *d, json j)
 {
-	for (auto& [key, value] : j.items()) {
+	for (auto &[key, value] : j.items()) {
 		if (value.is_object()) {
 			obs_data_set_json_object(d, key.c_str(), value);
 		} else if (value.is_array()) {
@@ -153,23 +154,22 @@ json Utils::Json::ObsDataToJson(obs_data_t *d, bool includeDefault)
 			continue;
 
 		switch (type) {
-			case OBS_DATA_STRING:
-				set_json_string(&j, name, item);
-				break;
-			case OBS_DATA_NUMBER:
-				set_json_number(&j, name, item);
-				break;
-			case OBS_DATA_BOOLEAN:
-				set_json_bool(&j, name, item);
-				break;
-			case OBS_DATA_OBJECT:
-				set_json_object(&j, name, item, includeDefault);
-				break;
-			case OBS_DATA_ARRAY:
-				set_json_array(&j, name, item, includeDefault);
-				break;
-			default:
-				;
+		case OBS_DATA_STRING:
+			set_json_string(&j, name, item);
+			break;
+		case OBS_DATA_NUMBER:
+			set_json_number(&j, name, item);
+			break;
+		case OBS_DATA_BOOLEAN:
+			set_json_bool(&j, name, item);
+			break;
+		case OBS_DATA_OBJECT:
+			set_json_object(&j, name, item, includeDefault);
+			break;
+		case OBS_DATA_ARRAY:
+			set_json_array(&j, name, item, includeDefault);
+			break;
+		default:;
 		}
 	}
 
@@ -178,21 +178,45 @@ json Utils::Json::ObsDataToJson(obs_data_t *d, bool includeDefault)
 
 bool Utils::Json::GetJsonFileContent(std::string fileName, json &content)
 {
-	std::string textContent;
-	if (!Utils::Platform::GetTextFileContent(fileName, textContent))
+	std::ifstream f(std::filesystem::u8path(fileName));
+	if (!f.is_open())
 		return false;
 
 	try {
-		content = json::parse(textContent);
-	} catch (json::parse_error& e) {
-		blog(LOG_WARNING, "Failed to decode content of JSON file `%s`. Error: %s", fileName.c_str(), e.what()); 
+		content = json::parse(f);
+	} catch (json::parse_error &e) {
+		blog(LOG_WARNING, "[Utils::Json::GetJsonFileContent] Failed to decode content of JSON file `%s`. Error: %s",
+		     fileName.c_str(), e.what());
 		return false;
 	}
+
 	return true;
 }
 
-bool Utils::Json::SetJsonFileContent(std::string fileName, json content, bool createNew)
+bool Utils::Json::SetJsonFileContent(std::string fileName, const json &content, bool makeDirs)
 {
-	std::string textContent = content.dump(2);
-	return Utils::Platform::SetTextFileContent(fileName, textContent, createNew);
+	auto jsonFilePath = std::filesystem::u8path(fileName);
+
+	if (makeDirs) {
+		auto p = jsonFilePath.parent_path();
+		std::error_code ec;
+		if (!ec && !std::filesystem::exists(p, ec))
+			std::filesystem::create_directories(p, ec);
+		if (ec) {
+			blog(LOG_ERROR, "[Utils::Json::SetJsonFileContent] Failed to create path directories: %s",
+			     ec.message().c_str());
+			return false;
+		}
+	}
+
+	std::ofstream f(jsonFilePath);
+	if (!f.is_open()) {
+		blog(LOG_ERROR, "[Utils::Json::SetJsonFileContent] Failed to open file `%s` for writing", fileName.c_str());
+		return false;
+	}
+
+	// Set indent to 2 spaces, then dump content
+	f << std::setw(2) << content;
+
+	return true;
 }

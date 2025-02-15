@@ -20,10 +20,12 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <inttypes.h>
 #include <QString>
 
-#include "Obs.h"
-#include "../plugin-macros.generated.h"
+#include <obs-module.h>
 
-#define CASE(x) case x: return #x;
+#include <util/util.hpp>
+
+#include "Obs.h"
+#include "plugin-macros.generated.h"
 
 std::string Utils::Obs::StringHelper::GetObsVersion()
 {
@@ -38,108 +40,66 @@ std::string Utils::Obs::StringHelper::GetObsVersion()
 	return combined.toStdString();
 }
 
+std::string Utils::Obs::StringHelper::GetModuleConfigPath(std::string fileName)
+{
+	BPtr<char> configPath = obs_module_config_path(fileName.c_str());
+	return std::string(configPath.Get());
+}
+
 std::string Utils::Obs::StringHelper::GetCurrentSceneCollection()
 {
-	char *sceneCollectionName = obs_frontend_get_current_scene_collection();
-	std::string ret = sceneCollectionName;
-	bfree(sceneCollectionName);
-	return ret;
+	BPtr<char> sceneCollectionName = obs_frontend_get_current_scene_collection();
+	return std::string(sceneCollectionName.Get());
 }
 
 std::string Utils::Obs::StringHelper::GetCurrentProfile()
 {
-	char *profileName = obs_frontend_get_current_profile();
-	std::string ret = profileName;
-	bfree(profileName);
-	return ret;
+	BPtr<char> profileName = obs_frontend_get_current_profile();
+	return std::string(profileName.Get());
 }
 
 std::string Utils::Obs::StringHelper::GetCurrentProfilePath()
 {
-	char *profilePath = obs_frontend_get_current_profile_path();
-	std::string ret = profilePath;
-	bfree(profilePath);
-	return ret;
+	BPtr<char> profilePath = obs_frontend_get_current_profile_path();
+	return std::string(profilePath.Get());
 }
 
 std::string Utils::Obs::StringHelper::GetCurrentRecordOutputPath()
 {
-	char *recordOutputPath = obs_frontend_get_current_record_output_path();
-	std::string ret = recordOutputPath;
-	bfree(recordOutputPath);
+	BPtr<char> recordOutputPath = obs_frontend_get_current_record_output_path();
+	return std::string(recordOutputPath.Get());
+}
+
+std::string Utils::Obs::StringHelper::GetLastRecordFileName()
+{
+	OBSOutputAutoRelease output = obs_frontend_get_recording_output();
+	if (!output)
+		return "";
+
+	OBSDataAutoRelease outputSettings = obs_output_get_settings(output);
+
+	obs_data_item_t *item = obs_data_item_byname(outputSettings, "url");
+	if (!item) {
+		item = obs_data_item_byname(outputSettings, "path");
+		if (!item)
+			return "";
+	}
+
+	std::string ret = obs_data_item_get_string(item);
+	obs_data_item_release(&item);
 	return ret;
 }
 
-std::string Utils::Obs::StringHelper::GetSourceType(obs_source_t *source)
+std::string Utils::Obs::StringHelper::GetLastReplayBufferFileName()
 {
-	obs_source_type sourceType = obs_source_get_type(source);
-
-	switch (sourceType) {
-		default:
-		CASE(OBS_SOURCE_TYPE_INPUT)
-		CASE(OBS_SOURCE_TYPE_FILTER)
-		CASE(OBS_SOURCE_TYPE_TRANSITION)
-		CASE(OBS_SOURCE_TYPE_SCENE)
-	}
+	BPtr<char> replayBufferPath = obs_frontend_get_last_replay();
+	return std::string(replayBufferPath.Get());
 }
 
-std::string Utils::Obs::StringHelper::GetInputMonitorType(enum obs_monitoring_type monitorType)
+std::string Utils::Obs::StringHelper::GetLastScreenshotFileName()
 {
-	switch (monitorType) {
-		default:
-		CASE(OBS_MONITORING_TYPE_NONE)
-		CASE(OBS_MONITORING_TYPE_MONITOR_ONLY)
-		CASE(OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT)
-	}
-}
-
-std::string Utils::Obs::StringHelper::GetInputMonitorType(obs_source_t *input)
-{
-	obs_monitoring_type monitorType = obs_source_get_monitoring_type(input);
-
-	return GetInputMonitorType(monitorType);
-}
-
-std::string Utils::Obs::StringHelper::GetMediaInputState(obs_source_t *input)
-{
-	obs_media_state mediaState = obs_source_media_get_state(input);
-
-	switch (mediaState) {
-		default:
-		CASE(OBS_MEDIA_STATE_NONE)
-		CASE(OBS_MEDIA_STATE_PLAYING)
-		CASE(OBS_MEDIA_STATE_OPENING)
-		CASE(OBS_MEDIA_STATE_BUFFERING)
-		CASE(OBS_MEDIA_STATE_PAUSED)
-		CASE(OBS_MEDIA_STATE_STOPPED)
-		CASE(OBS_MEDIA_STATE_ENDED)
-		CASE(OBS_MEDIA_STATE_ERROR)
-	}
-}
-
-std::string Utils::Obs::StringHelper::GetLastReplayBufferFilePath()
-{
-	OBSOutputAutoRelease output = obs_frontend_get_replay_buffer_output();
-	calldata_t cd = {0};
-	proc_handler_t *ph = obs_output_get_proc_handler(output);
-	proc_handler_call(ph, "get_last_replay", &cd);
-	auto ret = calldata_string(&cd, "path");
-	calldata_free(&cd);
-	return ret;
-}
-
-std::string Utils::Obs::StringHelper::GetSceneItemBoundsType(enum obs_bounds_type type)
-{
-	switch (type) {
-		default:
-		CASE(OBS_BOUNDS_NONE)
-		CASE(OBS_BOUNDS_STRETCH)
-		CASE(OBS_BOUNDS_SCALE_INNER)
-		CASE(OBS_BOUNDS_SCALE_OUTER)
-		CASE(OBS_BOUNDS_SCALE_TO_WIDTH)
-		CASE(OBS_BOUNDS_SCALE_TO_HEIGHT)
-		CASE(OBS_BOUNDS_MAX_ONLY)
-	}
+	BPtr<char> screenshotPath = obs_frontend_get_last_screenshot();
+	return std::string(screenshotPath.Get());
 }
 
 std::string Utils::Obs::StringHelper::DurationToTimecode(uint64_t ms)
@@ -152,20 +112,7 @@ std::string Utils::Obs::StringHelper::DurationToTimecode(uint64_t ms)
 	uint64_t secsPart = secs % 60ULL;
 	uint64_t msPart = ms % 1000ULL;
 
-	QString formatted = QString::asprintf("%02" PRIu64 ":%02" PRIu64 ":%02" PRIu64 ".%03" PRIu64, hoursPart, minutesPart, secsPart, msPart);
+	QString formatted =
+		QString::asprintf("%02" PRIu64 ":%02" PRIu64 ":%02" PRIu64 ".%03" PRIu64, hoursPart, minutesPart, secsPart, msPart);
 	return formatted.toStdString();
-}
-
-std::string Utils::Obs::StringHelper::GetOutputState(ObsOutputState state)
-{
-	switch (state) {
-		default:
-		CASE(OBS_WEBSOCKET_OUTPUT_UNKNOWN)
-		CASE(OBS_WEBSOCKET_OUTPUT_STARTING)
-		CASE(OBS_WEBSOCKET_OUTPUT_STARTED)
-		CASE(OBS_WEBSOCKET_OUTPUT_STOPPING)
-		CASE(OBS_WEBSOCKET_OUTPUT_STOPPED)
-		CASE(OBS_WEBSOCKET_OUTPUT_PAUSED)
-		CASE(OBS_WEBSOCKET_OUTPUT_RESUMED)
-	}
 }

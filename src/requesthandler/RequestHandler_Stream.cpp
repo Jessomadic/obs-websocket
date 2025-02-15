@@ -26,6 +26,7 @@ with this program. If not, see <https://www.gnu.org/licenses/>
  * @responseField outputReconnecting  | Boolean | Whether the output is currently reconnecting
  * @responseField outputTimecode      | String  | Current formatted timecode string for the output
  * @responseField outputDuration      | Number  | Current duration in milliseconds for the output
+ * @responseField outputCongestion    | Number  | Congestion of the output
  * @responseField outputBytes         | Number  | Number of bytes sent by the output
  * @responseField outputSkippedFrames | Number  | Number of frames skipped by the output's process
  * @responseField outputTotalFrames   | Number  | Total number of frames delivered by the output's process
@@ -37,17 +38,22 @@ with this program. If not, see <https://www.gnu.org/licenses/>
  * @api requests
  * @category stream
  */
-RequestResult RequestHandler::GetStreamStatus(const Request&)
+RequestResult RequestHandler::GetStreamStatus(const Request &)
 {
 	OBSOutputAutoRelease streamOutput = obs_frontend_get_streaming_output();
 
 	uint64_t outputDuration = Utils::Obs::NumberHelper::GetOutputDuration(streamOutput);
+
+	float outputCongestion = obs_output_get_congestion(streamOutput);
+	if (std::isnan(outputCongestion)) // libobs does not handle NaN, so we're handling it here
+		outputCongestion = 0.0f;
 
 	json responseData;
 	responseData["outputActive"] = obs_output_active(streamOutput);
 	responseData["outputReconnecting"] = obs_output_reconnecting(streamOutput);
 	responseData["outputTimecode"] = Utils::Obs::StringHelper::DurationToTimecode(outputDuration);
 	responseData["outputDuration"] = outputDuration;
+	responseData["outputCongestion"] = outputCongestion;
 	responseData["outputBytes"] = (uint64_t)obs_output_get_total_bytes(streamOutput);
 	responseData["outputSkippedFrames"] = obs_output_get_frames_dropped(streamOutput);
 	responseData["outputTotalFrames"] = obs_output_get_total_frames(streamOutput);
@@ -67,7 +73,7 @@ RequestResult RequestHandler::GetStreamStatus(const Request&)
  * @api requests
  * @category stream
  */
-RequestResult RequestHandler::ToggleStream(const Request&)
+RequestResult RequestHandler::ToggleStream(const Request &)
 {
 	json responseData;
 	if (obs_frontend_streaming_active()) {
@@ -91,7 +97,7 @@ RequestResult RequestHandler::ToggleStream(const Request&)
  * @api requests
  * @category stream
  */
-RequestResult RequestHandler::StartStream(const Request&)
+RequestResult RequestHandler::StartStream(const Request &)
 {
 	if (obs_frontend_streaming_active())
 		return RequestResult::Error(RequestStatus::OutputRunning);
@@ -112,13 +118,45 @@ RequestResult RequestHandler::StartStream(const Request&)
  * @api requests
  * @category stream
  */
-RequestResult RequestHandler::StopStream(const Request&)
+RequestResult RequestHandler::StopStream(const Request &)
 {
 	if (!obs_frontend_streaming_active())
 		return RequestResult::Error(RequestStatus::OutputNotRunning);
 
 	// TODO: Call signal directly to perform blocking wait
 	obs_frontend_streaming_stop();
+
+	return RequestResult::Success();
+}
+
+/**
+ * Sends CEA-608 caption text over the stream output.
+ *
+ * @requestField captionText | String | Caption text
+ *
+ * @requestType SendStreamCaption
+ * @complexity 2
+ * @rpcVersion -1
+ * @initialVersion 5.0.0
+ * @category stream
+ * @api requests
+ */
+RequestResult RequestHandler::SendStreamCaption(const Request &request)
+{
+	RequestStatus::RequestStatus statusCode;
+	std::string comment;
+	if (!request.ValidateString("captionText", statusCode, comment, true))
+		return RequestResult::Error(statusCode, comment);
+
+	if (!obs_frontend_streaming_active())
+		return RequestResult::Error(RequestStatus::OutputNotRunning);
+
+	std::string captionText = request.RequestData["captionText"];
+
+	OBSOutputAutoRelease output = obs_frontend_get_streaming_output();
+
+	// 0.0 means no delay until the next caption can be sent
+	obs_output_output_caption_text2(output, captionText.c_str(), 0.0);
 
 	return RequestResult::Success();
 }

@@ -21,25 +21,20 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QPainter>
 #include <QUrl>
 #include <obs-module.h>
+#include <qrcodegen.hpp>
 
 #include "ConnectInfo.h"
-#include "../../deps/qr/cpp/QrCode.hpp"
 #include "../obs-websocket.h"
 #include "../Config.h"
 #include "../utils/Platform.h"
 
-ConnectInfo::ConnectInfo(QWidget* parent) :
-	QDialog(parent, Qt::Dialog),
-	ui(new Ui::ConnectInfo)
+ConnectInfo::ConnectInfo(QWidget *parent) : QDialog(parent, Qt::Dialog), ui(new Ui::ConnectInfo)
 {
 	ui->setupUi(this);
 
-	connect(ui->copyServerIpButton, &QPushButton::clicked,
-		this, &ConnectInfo::CopyServerIpButtonClicked);
-	connect(ui->copyServerPortButton, &QPushButton::clicked,
-		this, &ConnectInfo::CopyServerPortButtonClicked);
-	connect(ui->copyServerPasswordButton, &QPushButton::clicked,
-		this, &ConnectInfo::CopyServerPasswordButtonClicked);
+	connect(ui->copyServerIpButton, &QPushButton::clicked, this, &ConnectInfo::CopyServerIpButtonClicked);
+	connect(ui->copyServerPortButton, &QPushButton::clicked, this, &ConnectInfo::CopyServerPortButtonClicked);
+	connect(ui->copyServerPasswordButton, &QPushButton::clicked, this, &ConnectInfo::CopyServerPasswordButtonClicked);
 }
 
 ConnectInfo::~ConnectInfo()
@@ -69,7 +64,7 @@ void ConnectInfo::RefreshData()
 	QString serverPassword;
 	if (conf->AuthRequired) {
 		ui->copyServerPasswordButton->setEnabled(true);
-		serverPassword = QUrl::toPercentEncoding(conf->ServerPassword);
+		serverPassword = QUrl::toPercentEncoding(QString::fromStdString(conf->ServerPassword));
 	} else {
 		ui->copyServerPasswordButton->setEnabled(false);
 		serverPassword = obs_module_text("OBSWebSocket.ConnectInfo.ServerPasswordPlaceholderText");
@@ -110,17 +105,17 @@ void ConnectInfo::SetClipboardText(QString text)
 
 void ConnectInfo::DrawQr(QString qrText)
 {
-	QPixmap map(230, 230);
+	QPixmap map(236, 236);
 	map.fill(Qt::white);
 	QPainter painter(&map);
-	
+
 	qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(QT_TO_UTF8(qrText), qrcodegen::QrCode::Ecc::MEDIUM);
 	const int s = qr.getSize() > 0 ? qr.getSize() : 1;
 	const double w = map.width();
 	const double h = map.height();
-	const double aspect = w/h;
+	const double aspect = w / h;
 	const double size = ((aspect > 1.0) ? h : w);
-	const double scale = size / (s+2);
+	const double scale = size / (s + 2);
 	painter.setPen(Qt::NoPen);
 	painter.setBrush(Qt::black);
 

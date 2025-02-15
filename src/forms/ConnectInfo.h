@@ -21,16 +21,15 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 
 #include <QtWidgets/QDialog>
 
-#include "../plugin-macros.generated.h"
+#include "plugin-macros.generated.h"
 
 #include "ui_ConnectInfo.h"
 
-class ConnectInfo : public QDialog
-{
+class ConnectInfo : public QDialog {
 	Q_OBJECT
 
 public:
-	explicit ConnectInfo(QWidget* parent = 0);
+	explicit ConnectInfo(QWidget *parent = 0);
 	~ConnectInfo();
 	void showEvent(QShowEvent *event);
 	void RefreshData();

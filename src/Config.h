@@ -23,23 +23,25 @@ with this program. If not, see <https://www.gnu.org/licenses/>
 #include <QString>
 #include <util/config-file.h>
 
+#include "utils/Json.h"
 #include "plugin-macros.generated.h"
 
 struct Config {
-	Config();
-	void Load();
+	void Load(json config = nullptr);
 	void Save();
-	void SetDefaultsToGlobalStore();
-	config_t* GetConfigStore();
 
-	std::atomic<bool> PortOverridden;
-	std::atomic<bool> PasswordOverridden;
+	std::atomic<bool> PortOverridden = false;
+	std::atomic<bool> PasswordOverridden = false;
 
-	std::atomic<bool> FirstLoad;
-	std::atomic<bool> ServerEnabled;
-	std::atomic<uint16_t> ServerPort;
-	std::atomic<bool> DebugEnabled;
-	std::atomic<bool> AlertsEnabled;
-	std::atomic<bool> AuthRequired;
-	QString ServerPassword;
+	std::atomic<bool> FirstLoad = true;
+	std::atomic<bool> ServerEnabled = false;
+	std::atomic<uint16_t> ServerPort = 4455;
+	std::atomic<bool> Ipv4Only = false;
+	std::atomic<bool> DebugEnabled = false;
+	std::atomic<bool> AlertsEnabled = false;
+	std::atomic<bool> AuthRequired = true;
+	std::string ServerPassword;
 };
+
+json MigrateGlobalConfigData();
+bool MigratePersistentData();
